@@ -1,5 +1,6 @@
 package org.magnetron.magnetronserver
 
+
 import magnetron_kotlin.MagAction
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.web.bind.annotation.*

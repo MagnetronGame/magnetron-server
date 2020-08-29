@@ -5,9 +5,9 @@
 //    }
 //}
 
-includeBuild("../../magnetron_kotlin") {
+includeBuild("../../magnetron-game-kotlin") {
     dependencySubstitution {
-        substitute(module("org.magnetron:magnetron_kotlin:-SNAPSHOT")).with(project(":"))
+        substitute(module("org.magnetron:magnetron-game-kotlin:-SNAPSHOT")).with(project(":"))
     }
 }
 
