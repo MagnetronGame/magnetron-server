@@ -1,8 +1,8 @@
 package org.magnetron.magnetronserver
 
-import magnetron_kotlin.MagAction
-import magnetron_kotlin.MagState
-import magnetron_kotlin.Magnetron
+import magnetron_game_kotlin.MagAction
+import magnetron_game_kotlin.MagState
+import magnetron_game_kotlin.Magnetron
 import org.springframework.stereotype.Service
 import java.lang.IllegalArgumentException
 import kotlin.random.Random
@@ -12,18 +12,24 @@ class GamesHandlerService {
 
     private val runningGames: MutableMap<String, Magnetron> = mutableMapOf()
 
+
     fun isRunningGame(pin: String) = runningGames.containsKey(pin)
 
-    fun createGame(): String {
+    fun createGame(pin: String): String {
         val game = Magnetron()
         game.start()
-        val pin = generatePin()
         runningGames[pin] = game
         return pin
     }
 
+    fun getCurrentPlayerIndex(pin: String) =
+            runningGames[pin]?.currentState?.avatarTurnIndex ?: throw IllegalArgumentException("Invalid pin")
+
     fun getGameState(pin: String): MagState =
             runningGames[pin]?.currentState ?: throw IllegalArgumentException("Invalid pin")
+
+    fun getGameStatePlayerView(pin: String, playerIndex: Int) =
+            runningGames[pin]?.currentStateForPlayer(playerIndex) ?: throw IllegalArgumentException("Invalid pin")
 
     fun getPossibleActions(pin: String): List<MagAction> =
         runningGames[pin]?.possibleActions ?: listOf()
@@ -36,13 +42,5 @@ class GamesHandlerService {
         runningGames.remove(pin) != null
 
 
-    private fun generatePin(): String {
-        while (true) {
-            val pin = (0 until 4).joinToString("") { Random.nextInt(0, 9).toString() }
-            if (!runningGames.containsKey(pin)) {
-                return pin
-            }
-        }
 
-    }
 }
