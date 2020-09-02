@@ -20,6 +20,7 @@ data class JoinGameResponse(
         val playerIndex: Int
 )
 
+
 @RestController()
 class Controller {
 
@@ -36,8 +37,8 @@ class Controller {
     @GetMapping("api/hello")
     fun hello() = "hello"
 
-    @PostMapping("api/createGame")
-    fun createGame(): CreateGameResponse {
+    @PostMapping("api/createLobby")
+    fun createLobby(): CreateGameResponse {
         val accessToken: AccessToken = authorization.createAccessToken()
         val gamePin = gameLobbies.createLobby()
         authorization.registerHost(accessToken, gamePin)
@@ -51,24 +52,24 @@ class Controller {
     fun startGame(
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
-    ) {
+    ): Boolean {
         val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin && permissions.startGame) {
-            if (gameLobbies.lobbyExists(pin) && gameLobbies.isLobbyFull(pin)) {
+        if (permissions.pin == pin && permissions.startGame && gameLobbies.lobbyExists(pin)) {
+            return if (gameLobbies.isLobbyFull(pin)) {
                 val lobby = gameLobbies.removeLobby(pin)
                 gamesHandlerService.createGame(pin)
-            }
-        }
-
+                true
+            } else false
+        } else throw InvalidAccessException()
     }
 
-    @PostMapping("api/joinGame/{pin}")
-    fun joinGame(
+    @PostMapping("api/joinLobby/{pin}")
+    fun joinLobby(
             @PathVariable pin: String,
             @RequestBody name: String
     ): JoinGameResponse {
         if (!gameLobbies.lobbyExists(pin)) throw NoExistingGameException()
-        else if (!gameLobbies.isLobbyFull(pin)) throw NoExistingGameException()
+        else if (gameLobbies.isLobbyFull(pin)) throw NoExistingGameException()
         else {
             val accessToken = authorization.createAccessToken()
             val playerIndex = gameLobbies.joinLobby(pin, name)
@@ -79,6 +80,39 @@ class Controller {
                     playerIndex = playerIndex
             )
         }
+    }
+
+    @GetMapping("api/lobby/{pin}")
+    fun getLobby(
+            @RequestHeader("Authorization") accessToken: String,
+            @PathVariable pin: String
+    ): Lobby {
+        val permissions = authorization.getPermissionsFor(accessToken)
+        if (permissions.pin == pin) {
+            return gameLobbies.getLobby(pin)
+        } else throw InvalidAccessException()
+    }
+
+    @GetMapping("api/lobbyExists/{pin}")
+    fun lobbyExists(
+            @RequestHeader("Authorization") accessToken: String,
+            @PathVariable pin: String
+    ): Boolean {
+        val permissions = authorization.getPermissionsFor(accessToken)
+        if (permissions.pin == pin) {
+            return gameLobbies.lobbyExists(pin)
+        } else throw InvalidAccessException()
+    }
+
+    @GetMapping("api/gameExists/{pin}")
+    fun gameExists(
+            @RequestHeader("Authorization") accessToken: String,
+            @PathVariable pin: String
+    ): Boolean {
+        val permissions = authorization.getPermissionsFor(accessToken)
+        if (permissions.pin == pin) {
+            return gamesHandlerService.isRunningGame(pin)
+        } else throw InvalidAccessException()
     }
 
     @GetMapping("api/gameState/{pin}/{playerIndex}")

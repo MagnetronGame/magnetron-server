@@ -27,7 +27,7 @@ class GameLobbyService {
 
     fun isLobbyFull(pin: String): Boolean {
         val lobby = lobbies[pin] ?: throw IllegalStateException("Lobby does not exist")
-        return lobby.players.size < lobby.playerCount
+        return lobby.players.size >= lobby.playerCount
     }
 
     fun joinLobby(pin: String, playerName: String): Int {
@@ -41,6 +41,11 @@ class GameLobbyService {
     fun getLobbyPlayers(pin: String): List<String> {
         val lobby = lobbies[pin] ?: throw IllegalStateException("Lobby does not exist")
         return lobby.players.toList()
+    }
+
+    fun getLobby(pin: String): Lobby {
+        val lobby = lobbies[pin] ?: throw IllegalStateException("Lobby does not exist")
+        return lobby
     }
 
     fun removeLobby(pin: String): Lobby {

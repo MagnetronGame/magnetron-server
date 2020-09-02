@@ -9,7 +9,7 @@ typealias AccessToken = String
 
 data class GamePermissions(
         val pin: String,
-        val startGame: Boolean = true,
+        val startGame: Boolean = false,
         val readGameAll: Boolean = false,
         val readGameForPlayer: List<Int> = listOf(),
         val updateGameForPlayer: List<Int> = listOf(),
