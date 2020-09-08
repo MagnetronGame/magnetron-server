@@ -5,8 +5,10 @@ import magnetron_game_kotlin.MagAction
 import magnetron_game_kotlin.MagState
 import magnetron_game_kotlin.MagStatePlayerView
 import org.magnetron.magnetronserver.error.InvalidAccessException
-import org.magnetron.magnetronserver.error.NoExistingGameException
+import org.magnetron.magnetronserver.error.NotExistingException
 import org.springframework.beans.factory.annotation.Autowired
+import org.springframework.messaging.simp.SimpMessagingTemplate
+import org.springframework.messaging.simp.annotation.SubscribeMapping
 import org.springframework.web.bind.annotation.*
 
 data class CreateGameResponse(
@@ -28,19 +30,22 @@ class Controller {
     lateinit var authorization: AuthenticationService
 
     @Autowired
-    lateinit var gameLobbies: GameLobbyService
+    lateinit var gameSessions: GameSessionsService
+
 
     @Autowired
-    lateinit var gamesHandlerService: GamesHandlerService
-
+    lateinit var simpMessagingTemplate: SimpMessagingTemplate
 
     @GetMapping("api/hello")
     fun hello() = "hello"
 
+    @SubscribeMapping("/**")
+    fun onSubscribe() = "subscribed"
+
     @PostMapping("api/createLobby")
     fun createLobby(): CreateGameResponse {
         val accessToken: AccessToken = authorization.createAccessToken()
-        val gamePin = gameLobbies.createLobby()
+        val gamePin = gameSessions.createLobby()
         authorization.registerHost(accessToken, gamePin)
         return CreateGameResponse(
                 pin = gamePin,
@@ -53,14 +58,13 @@ class Controller {
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
     ): Boolean {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin && permissions.startGame && gameLobbies.lobbyExists(pin)) {
-            return if (gameLobbies.isLobbyFull(pin)) {
-                val lobby = gameLobbies.removeLobby(pin)
-                gamesHandlerService.createGame(pin)
-                true
-            } else false
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) { permissions ->
+            permissions.pin == pin && permissions.startGame
+        }
+        return if (gameSessions.startGameFromLobby(pin)) {
+            simpMessagingTemplate.convertAndSend("/notify/game/started/$pin", true)
+            true
+        } else false
     }
 
     @PostMapping("api/joinLobby/{pin}")
@@ -68,18 +72,18 @@ class Controller {
             @PathVariable pin: String,
             @RequestBody name: String
     ): JoinGameResponse {
-        if (!gameLobbies.lobbyExists(pin)) throw NoExistingGameException()
-        else if (gameLobbies.isLobbyFull(pin)) throw NoExistingGameException()
-        else {
-            val accessToken = authorization.createAccessToken()
-            val playerIndex = gameLobbies.joinLobby(pin, name)
-            authorization.registerClient(accessToken, pin, playerIndex)
-            return JoinGameResponse(
-                    pin = pin,
-                    accessToken = accessToken,
-                    playerIndex = playerIndex
-            )
+        val playerIndex = gameSessions.joinLobby(pin, name)
+        simpMessagingTemplate.convertAndSend("/notify/lobby/$pin", true)
+        if (gameSessions.isLobbyReady(pin)) {
+            simpMessagingTemplate.convertAndSend("/notify/lobby/ready/$pin", true)
         }
+        val accessToken = authorization.createAccessToken()
+        authorization.registerClient(accessToken, pin, playerIndex)
+        return JoinGameResponse(
+                pin = pin,
+                accessToken = accessToken,
+                playerIndex = playerIndex
+        )
     }
 
     @GetMapping("api/lobby/{pin}")
@@ -87,10 +91,10 @@ class Controller {
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
     ): Lobby {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin) {
-            return gameLobbies.getLobby(pin)
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) {
+            it.pin == pin
+        }
+        return gameSessions.getLobby(pin) ?: throw NotExistingException()
     }
 
     @GetMapping("api/lobbyExists/{pin}")
@@ -98,10 +102,10 @@ class Controller {
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
     ): Boolean {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin) {
-            return gameLobbies.lobbyExists(pin)
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) {
+            it.pin == pin
+        }
+        return gameSessions.hasLobby(pin)
     }
 
     @GetMapping("api/gameExists/{pin}")
@@ -109,10 +113,10 @@ class Controller {
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
     ): Boolean {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin) {
-            return gamesHandlerService.isRunningGame(pin)
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) {
+            it.pin == pin
+        }
+        return gameSessions.hasGame(pin)
     }
 
     @GetMapping("api/gameState/{pin}/{playerIndex}")
@@ -121,10 +125,10 @@ class Controller {
             @PathVariable pin: String,
             @PathVariable playerIndex: Int
     ): MagStatePlayerView {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        return if (permissions.pin == pin && permissions.readGameForPlayer.contains(playerIndex)) {
-            gamesHandlerService.getGameStatePlayerView(pin, playerIndex)
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) {
+            it.pin == pin && it.readGameForPlayer.contains(playerIndex)
+        }
+        return gameSessions.getGameStatePlayerView(pin, playerIndex)
     }
 
     @GetMapping("api/gameState/{pin}")
@@ -132,10 +136,10 @@ class Controller {
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
     ): MagState {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin && permissions.readGameAll) {
-            return gamesHandlerService.getGameState(pin)
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) {
+            it.pin == pin && it.readGameAll
+        }
+        return gameSessions.getGameState(pin)
     }
 
     @GetMapping("api/possibleActions/{pin}")
@@ -143,10 +147,10 @@ class Controller {
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
     ): List<MagAction> {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin) {
-            return gamesHandlerService.getPossibleActions(pin)
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) {
+            it.pin == pin
+        }
+        return gameSessions.getPossibleActions(pin)
     }
 
     @PostMapping("api/performAction/{pin}")
@@ -155,13 +159,12 @@ class Controller {
             @PathVariable pin: String,
             @RequestBody action: MagAction
     ): MagState {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (
-                permissions.pin == pin
-                && permissions.updateGameForPlayer.contains(gamesHandlerService.getCurrentPlayerIndex(pin))
-        ) {
-            return gamesHandlerService.performAction(pin, action)
-        } else throw InvalidAccessException()
+        authorization.validate(accessToken) {
+            it.pin == pin && it.updateGameForPlayer.contains(gameSessions.getCurrentPlayerIndex(pin))
+        }
+        val newState = gameSessions.performAction(pin, action)
+        simpMessagingTemplate.convertAndSend("/notify/game/state/$pin", true)
+        return newState
     }
 
     @DeleteMapping("api/removeGame/{pin}")
@@ -169,10 +172,10 @@ class Controller {
             @RequestHeader("Authorization") accessToken: String,
             @PathVariable pin: String
     ) {
-        val permissions = authorization.getPermissionsFor(accessToken)
-        if (permissions.pin == pin && permissions.removeGame) {
-            gamesHandlerService.removeGame(pin)
+        authorization.validate(accessToken) {
+            it.pin == pin && it.removeGame
         }
+        gameSessions.removeGame(pin)
     }
 
 }

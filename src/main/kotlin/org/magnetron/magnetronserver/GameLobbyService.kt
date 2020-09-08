@@ -1,5 +1,6 @@
 package org.magnetron.magnetronserver
 
+import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import java.lang.IllegalStateException
 import kotlin.random.Random
@@ -14,13 +15,12 @@ data class Lobby(
 @Service
 class GameLobbyService {
 
-    private val usedPins = mutableSetOf<String>()
     private val lobbies = mutableMapOf<String, Lobby>()
 
-    fun createLobby(): String {
-        val pin = generatePin()
-        lobbies[pin] = Lobby()
-        return pin
+    fun createLobby(pin: GamePin): Lobby {
+        val lobby = Lobby()
+        lobbies[pin] = lobby
+        return lobby
     }
 
     fun lobbyExists(pin: String): Boolean = lobbies.containsKey(pin)
@@ -30,11 +30,11 @@ class GameLobbyService {
         return lobby.players.size >= lobby.playerCount
     }
 
-    fun joinLobby(pin: String, playerName: String): Int {
+    fun joinLobby(pin: String, playerName: String): Pair<Lobby, Int> {
         val lobby = lobbies[pin] ?: throw IllegalStateException("Lobby does not exist")
         if (!isLobbyFull(pin)) {
             lobby.players.add(playerName)
-            return lobby.players.lastIndex
+            return Pair(lobby, lobby.players.lastIndex)
         } else throw IllegalStateException("Cannot join full lobby")
     }
 
@@ -43,23 +43,15 @@ class GameLobbyService {
         return lobby.players.toList()
     }
 
-    fun getLobby(pin: String): Lobby {
-        val lobby = lobbies[pin] ?: throw IllegalStateException("Lobby does not exist")
+    fun getLobby(pin: String): Lobby? {
+        val lobby = lobbies[pin]
         return lobby
     }
 
-    fun removeLobby(pin: String): Lobby {
-        val lobby = lobbies.remove(pin) ?: throw IllegalStateException("Lobby does not exist")
+    fun removeLobby(pin: String): Lobby? {
+        val lobby = lobbies.remove(pin)
         return lobby
     }
 
-    private fun generatePin(): String {
-        while (true) {
-            val pin = (0 until 4).joinToString("") { Random.nextInt(0, 9).toString() }
-            if (!usedPins.contains(pin)) {
-                usedPins.add(pin)
-                return pin
-            }
-        }
-    }
+
 }

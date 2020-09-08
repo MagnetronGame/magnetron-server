@@ -48,6 +48,10 @@ class AuthenticationService {
     fun getPermissionsFor(token: AccessToken): GamePermissions
         = permissionsByHost[token] ?: GamePermissions("-1")
 
+    fun validate(accessToken: AccessToken, message: String = "", validation: (GamePermissions) -> Boolean) {
+        val permissions = getPermissionsFor(accessToken)
+        if (!validation(permissions)) throw IllegalAccessException(message)
+    }
 
     private fun uuid() = UUID.randomUUID().toString()
 }

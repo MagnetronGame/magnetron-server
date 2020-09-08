@@ -28,7 +28,11 @@ dependencies {
 	}
 	testImplementation("org.springframework.security:spring-security-test")
 
+	implementation("org.springframework.boot:spring-boot-starter-websocket")
+
 	implementation("org.magnetron:magnetron-game-kotlin:-SNAPSHOT")
+
+	implementation("io.github.microutils:kotlin-logging:1.8.3")
 }
 
 tasks.withType<Test> {
